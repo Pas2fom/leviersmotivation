@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Moving Motivators</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: #F7F7F5;
+    color: #1A1A1A;
+    padding: 16px;
+    -webkit-touch-callout: none;
+  }
+  h1 {
+    font-size: 18px;
+    text-align: center;
+    margin: 4px 0 2px;
+  }
+  p.instructions {
+    text-align: center;
+    color: #666;
+    font-size: 13px;
+    margin: 0 0 16px;
+    line-height: 1.4;
+  }
+  #tray {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+    padding: 12px;
+    border: 1.5px dashed #C9C9C4;
+    border-radius: 10px;
+    min-height: 110px;
+    background: #EFEFEA;
+    margin-bottom: 14px;
+  }
+  .axis-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: #999;
+    padding: 0 4px;
+    margin-bottom: 4px;
+  }
+  #rankzone {
+    display: flex;
+    gap: 8px;
+    padding: 12px 8px;
+    border-radius: 10px;
+    background: #FFFFFF;
+    border: 1.5px solid #E0E0DC;
+    min-height: 110px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .mm-card {
+    width: 88px;
+    min-width: 88px;
+    height: 104px;
+    border-radius: 9px;
+    padding: 8px 6px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: #fff;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.18);
+    user-select: none;
+    touch-action: none;
+    position: relative;
+    z-index: 1;
+  }
+  .mm-card.dragging {
+    opacity: 0.4;
+    z-index: 10;
+  }
+  .mm-card .mm-title {
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    line-height: 1.2;
+  }
+  .mm-card .mm-desc {
+    font-size: 9px;
+    line-height: 1.2;
+    opacity: 0.92;
+  }
+  .dropslot {
+    width: 88px;
+    min-width: 88px;
+    height: 104px;
+    border-radius: 9px;
+    border: 1.5px dashed #D8D8D3;
+    flex-shrink: 0;
+  }
+  .dropslot.over {
+    border-color: #1A1A1A;
+    background: #F0F0EC;
+  }
+  .btn-row {
+    display: flex;
+    justify-content: center;
+    margin-top: 16px;
+  }
+  button {
+    font-size: 14px;
+    padding: 10px 22px;
+    border-radius: 8px;
+    border: 1px solid #1A1A1A;
+    background: #1A1A1A;
+    color: #fff;
+    cursor: pointer;
+  }
+  button:active { opacity: 0.8; }
+</style>
+</head>
+<body>
+
+<h1>Moving Motivators</h1>
+<p class="instructions">Faites glisser chaque carte dans la zone du bas pour la classer :<br><strong>moins important</strong> à gauche → <strong>plus important</strong> à droite</p>
+
+<div id="tray"></div>
+
+<div class="axis-labels">
+  <span>← Moins important</span>
+  <span>Plus important →</span>
+</div>
+<div id="rankzone"></div>
+
+<div class="btn-row">
+  <button onclick="resetAll()">Réinitialiser</button>
+</div>
+
+<script>
+const motivators = [
+  { id: 'curiosite', title: 'Curiosité', desc: "J'ai plein de choses à explorer et à étudier.", color: '#E24B4A' },
+  { id: 'valeurs', title: 'Valeurs', desc: 'Mes valeurs personnelles se retrouvent dans le groupe.', color: '#378ADD' },
+  { id: 'reconnaissance', title: 'Reconnaissance', desc: 'Les gens autour de moi approuvent ce que je fais et qui je suis.', color: '#F2C334', text: '#412402' },
+  { id: 'expertise', title: 'Expertise', desc: 'Mon travail challenge mes compétences, sans les dépasser.', color: '#639922' },
+  { id: 'pouvoir', title: 'Pouvoir', desc: "J'ai assez d'influence pour façonner les choses autour de moi.", color: '#8B5CF6' },
+  { id: 'liberte', title: 'Liberté', desc: 'Je suis autonome, indépendant des autres dans mon travail.', color: '#0EA5A4' },
+  { id: 'interactions', title: 'Interactions', desc: "J'ai de bons rapports avec les personnes avec qui je travaille.", color: '#EC6FBB' },
+  { id: 'ordre', title: 'Ordre', desc: 'Il y a assez de règles pour un environnement stable.', color: '#64748B' },
+  { id: 'but', title: 'But', desc: 'Mon but dans la vie se reflète dans mon travail.', color: '#F2994A' },
+  { id: 'statut', title: 'Statut', desc: 'Ma position est bonne et reconnue par les autres.', color: '#2563EB' }
+];
+
+const tray = document.getElementById('tray');
+const rankzone = document.getElementById('rankzone');
+const SLOT_COUNT = motivators.length;
+let draggedCard = null;
+let offsetX = 0, offsetY = 0;
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function makeCard(m) {
+  const el = document.createElement('div');
+  el.className = 'mm-card';
+  el.dataset.id = m.id;
+  el.style.background = m.color;
+  el.style.color = m.text || '#fff';
+  el.innerHTML = `<div class="mm-title">${m.title}</div><div class="mm-desc">${m.desc}</div>`;
+  attachDragEvents(el);
+  return el;
+}
+
+function buildSlots() {
+  rankzone.innerHTML = '';
+  for (let i = 0; i < SLOT_COUNT; i++) {
+    const slot = document.createElement('div');
+    slot.className = 'dropslot';
+    slot.dataset.index = i;
+    rankzone.appendChild(slot);
+  }
+}
+
+function getDropTarget(x, y) {
+  const elements = document.elementsFromPoint(x, y);
+  for (const el of elements) {
+    if (el.classList.contains('dropslot') && !el.querySelector('.mm-card')) return el;
+    if (el === tray) return tray;
+    if (el === rankzone) {
+      // find nearest empty slot
+      const slots = [...rankzone.querySelectorAll('.dropslot')];
+      const empty = slots.filter(s => !s.querySelector('.mm-card'));
+      if (empty.length) {
+        return empty.reduce((closest, s) => {
+          const r = s.getBoundingClientRect();
+          const cr = closest ? closest.getBoundingClientRect() : null;
+          const dist = Math.abs((r.left + r.right) / 2 - x);
+          const cdist = cr ? Math.abs((cr.left + cr.right) / 2 - x) : Infinity;
+          return dist < cdist ? s : closest;
+        }, null);
+      }
+    }
+  }
+  return null;
+}
+
+function clearOverStates() {
+  document.querySelectorAll('.dropslot.over').forEach(s => s.classList.remove('over'));
+}
+
+function attachDragEvents(card) {
+  card.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    draggedCard = card;
+    const rect = card.getBoundingClientRect();
+    offsetX = e.clientX - rect.left;
+    offsetY = e.clientY - rect.top;
+    card.classList.add('dragging');
+    card.style.position = 'fixed';
+    card.style.left = rect.left + 'px';
+    card.style.top = rect.top + 'px';
+    card.style.pointerEvents = 'none';
+    document.body.appendChild(card);
+    card.setPointerCapture && card.setPointerCapture(e.pointerId);
+  });
+}
+
+document.addEventListener('pointermove', (e) => {
+  if (!draggedCard) return;
+  draggedCard.style.left = (e.clientX - offsetX) + 'px';
+  draggedCard.style.top = (e.clientY - offsetY) + 'px';
+  clearOverStates();
+  draggedCard.style.display = 'none';
+  const target = getDropTarget(e.clientX, e.clientY);
+  draggedCard.style.display = '';
+  if (target && target.classList && target.classList.contains('dropslot')) {
+    target.classList.add('over');
+  }
+});
+
+document.addEventListener('pointerup', (e) => {
+  if (!draggedCard) return;
+  const card = draggedCard;
+  draggedCard = null;
+  clearOverStates();
+
+  card.style.display = 'none';
+  const target = getDropTarget(e.clientX, e.clientY);
+  card.style.display = '';
+
+  card.style.position = '';
+  card.style.left = '';
+  card.style.top = '';
+  card.style.pointerEvents = '';
+  card.classList.remove('dragging');
+
+  if (target === tray) {
+    tray.appendChild(card);
+  } else if (target && target.classList.contains('dropslot')) {
+    target.appendChild(card);
+  } else {
+    tray.appendChild(card);
+  }
+});
+
+function init() {
+  tray.innerHTML = '';
+  buildSlots();
+  shuffle(motivators).forEach(m => tray.appendChild(makeCard(m)));
+}
+
+function resetAll() { init(); }
+
+init();
+</script>
+
+</body>
+</html>
